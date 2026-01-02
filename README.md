@@ -93,7 +93,7 @@ _Note: The current implementation uses Dynamic Quantization, which optimizes Lin
 
 ### Optimization & Engineering
 
-- **Static Quantization:** Implement Static Quantization with a calibration dataset to optimize Conv2d layers for significant speed improvements on Edge devices.
+- [x] **Static Quantization:** Implement Static Quantization with a calibration dataset to optimize Conv2d layers for significant speed improvements on Edge devices. **(Currently blocked by `facenet-pytorch` library architecture (Residual connections lack `FloatFunctional` support). Requires custom model implementation.)**
 - **Dockerization:** Create a Dockerfile to containerize the application for cloud deployment (GCP/AWS).
 - **FastAPI Backend:** Decouple the engine into a REST API to support mobile app integration.
 
