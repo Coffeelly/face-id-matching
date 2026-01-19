@@ -4,10 +4,12 @@ import torch
 import sys
 import os
 import time
+import json
 
 # Add root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.face_engine import FaceVerifier
+from src.ocr_engine import IdentityOCR
 
 # --- CONFIGURATION ---
 st.set_page_config(
@@ -36,13 +38,15 @@ def load_models():
     
     q8_engine = FaceVerifier(use_quantized=True)
     
-    return std_engine, q8_engine
+    ocr_engine = IdentityOCR(model_name="qwen3-vl:8b") 
+    
+    return std_engine, q8_engine, ocr_engine
 
 try:
-    with st.spinner("Initializing AI Engines"):
-        std_engine, q8_engine = load_models()
+    with st.spinner("Initializing AI Engines..."):
+        std_engine, q8_engine, ocr_engine = load_models()
 except Exception as e:
-    st.error(f"Failed to load models.Error: {e}")
+    st.error(f"Failed to load models. Error: {e}")
     st.stop()
 
 # --- SIDEBAR CONTROLS ---
@@ -74,13 +78,14 @@ st.markdown("### Digital Identity & Liveness Detection Prototype")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.info("**Reference ID (Database)**")
+    st.info("**ID Card**")
     id_file = st.file_uploader("Upload ID Card", type=['jpg', 'png', 'jpeg'], key="id")
     if id_file:
         st.image(id_file, use_container_width=True)
+        # LOGIKA OCR DIHAPUS DARI SINI
 
 with col2:
-    st.info("**Live Selfie (User)**")
+    st.info("**Selfie (User)**")
     selfie_file = st.file_uploader("Upload Selfie", type=['jpg', 'png', 'jpeg'], key="selfie")
     if selfie_file:
         st.image(selfie_file, use_container_width=True)
@@ -91,9 +96,11 @@ if id_file and selfie_file:
     
     if st.button("Run Verification", type="primary", use_container_width=True):
         
-        # Detect & Align
-        with st.status("Running Computer Vision Pipeline...", expanded=True) as status:
-            st.write("Detecting faces with MTCNN...")
+        # Container status untuk menampung progress Face + OCR
+        with st.status("Running AI Pipeline...", expanded=True) as status:
+            
+            # --- 1. FACE VERIFICATION PHASE ---
+            st.write("👤 Processing Biometric Verification...")
             start_det = time.time()
             id_face = active_engine.process_image(id_file)
             selfie_face = active_engine.process_image(selfie_file)
@@ -102,37 +109,67 @@ if id_file and selfie_file:
             if id_face is None or selfie_face is None:
                 status.update(label="Face Detection Failed", state="error")
                 st.error("Could not detect faces. Please try clearer photos.")
+                st.stop()
+            
+            st.write(f"✅ Faces Detected in {det_time:.1f}ms")
+            st.write(f"🧠 Generating Embeddings ({model_choice})...")
+            score, latency = active_engine.verify(id_face, selfie_face)
+            
+            # --- 2. OCR EXTRACTION PHASE ---
+            st.write("📝 Extracting ID Data (OCR)...")
+            
+            # save temporary file if button is pressed
+            temp_path = "temp_id_upload.jpg"
+            with open(temp_path, "wb") as f:
+                f.write(id_file.getbuffer())
+            
+            # Run OCR
+            ocr_result = ocr_engine.extract_data(temp_path)
+            
+            # Update Last Status 
+            status.update(label="Verification & Data Extraction Complete", state="complete")
+
+            # --- 3. RESULTS DASHBOARD ---
+            st.markdown("### 📊 Verification Results")
+
+            # -- Face Matching Metrics --
+            res_col1, res_col2, res_col3 = st.columns(3)
+            
+            res_col1.metric("Similarity Score", f"{score:.4f}", delta_color="off")
+            
+            lat_color = "normal" if latency < 100 else "off"
+            res_col2.metric("Inference Latency", f"{latency:.2f} ms", f"- {(100-latency):.1f}ms target", delta_color=lat_color)
+            
+            # Decision
+            is_match = score > threshold
+            if is_match:
+                res_col3.markdown('<p class="success-badge">MATCH VERIFIED</p>', unsafe_allow_html=True)
             else:
-                st.write(f"✅ Faces Detected in {det_time:.1f}ms")
-                
-                # Extract & Compare
-                st.write(f"🧠 Generating Embeddings using {model_choice}...")
-                score, latency = active_engine.verify(id_face, selfie_face)
-                status.update(label="Verification Complete", state="complete")
+                res_col3.markdown('<p class="error-badge">MATCH REJECTED</p>', unsafe_allow_html=True)
 
-                # --- RESULTS DASHBOARD ---
-                st.markdown("### 📊 Verification Results")
+            # -- OCR Results --
+            st.markdown("### 📄 Extracted Identity Data")
+            if "error" in ocr_result:
+                st.error(f"OCR Error: {ocr_result['error']}")
+            else:
+                # Tampilkan JSON hasil OCR
+                with st.expander("Show Extracted Data (JSON)", expanded=True):
+                    st.json(ocr_result)
+                    
+                    # Validasi Sederhana
+                    if "nik" in ocr_result and ocr_result["nik"]:
+                        nik_val = str(ocr_result["nik"])
+                        if len(nik_val) != 16:
+                            st.warning(f"⚠️ Warning: NIK length is {len(nik_val)} digits (Expected 16). Check image clarity.")
+                        else:
+                            st.success("✅ NIK Format Valid (16 Digits)")
 
-                res_col1, res_col2, res_col3 = st.columns(3)
-                
-                res_col1.metric("Similarity Score", f"{score:.4f}", delta_color="off")
-                
-                lat_color = "normal" if latency < 100 else "off"
-                res_col2.metric("Inference Latency", f"{latency:.2f} ms", f"- {(100-latency):.1f}ms target", delta_color=lat_color)
-                
-                # Decision
-                is_match = score > threshold
-                if is_match:
-                    res_col3.markdown('<p class="success-badge">MATCH VERIFIED</p>', unsafe_allow_html=True)
-                else:
-                    res_col3.markdown('<p class="error-badge">MATCH REJECTED</p>', unsafe_allow_html=True)
-
-                # Technical Details
-                with st.expander("Show Technical Details (Unit Test Data)"):
-                    st.json({
-                        "model_type": "INT8 Quantized" if "INT8" in model_choice else "FP32 Standard",
-                        "threshold_set": threshold,
-                        "raw_similarity": score,
-                        "inference_time_ms": latency,
-                        "input_tensor_shape": str(list(id_face.shape))
-                    })
+            # -- Technical Details --
+            with st.expander("Show Technical Details (Unit Test Data)"):
+                st.json({
+                    "model_type": "INT8 Quantized" if "INT8" in model_choice else "FP32 Standard",
+                    "threshold_set": threshold,
+                    "raw_similarity": score,
+                    "inference_time_ms": latency,
+                    "input_tensor_shape": str(list(id_face.shape))
+                })

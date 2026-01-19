@@ -2,19 +2,21 @@
 
 Face-ID Verification System is a production-prototype e-KYC (Know Your Customer) solution designed to demonstrate modern Deep Learning engineering practices for FinTech applications.
 
-The system implements a hybrid face verification pipeline using PyTorch, capable of switching between high-precision (FP32) and high-efficiency (INT8 Quantized) inference modes in real-time. It includes a comprehensive Streamlit dashboard for testing, benchmarking, and visualizing the verification process.
+The system implements a hybrid verification pipeline using PyTorch for face matching and a Multimodal LLM for intelligent document extraction. It includes a comprehensive Streamlit dashboard for testing, benchmarking, and visualizing the verification process.
 
 ## Key Features
 
 - **Hybrid Inference Engine:** Seamlessly toggle between Standard (FP32) and Dynamically Quantized (INT8) models to evaluate accuracy vs. latency trade-offs.
 - **Biometric Verification:** Implements 1:1 Face Matching using InceptionResnetV1 (trained on VGGFace2) and MTCNN for face alignment.
+- **Generative OCR (New):** Utilizes a local Vision-Language Model (Qwen-VL via Ollama) to intelligently extract and parse structured data (NIK, Name, Address) from ID cards, robust against noise and formatting issues.
 - **Performance Optimization:** Includes a dedicated quantization pipeline that compresses model weights by approximately 15%, optimized for CPU deployment.
 - **Engineering Reliability:** Features a built-in Unit Test suite (via `unittest`) to validate tensor shapes, model initialization, and similarity logic before deployment.
-- **Interactive Dashboard:** A Streamlit-based UI that provides real-time feedback on similarity scores, inference time, and detection visualization.
+- **Interactive Dashboard:** A Streamlit-based UI that provides real-time feedback on similarity scores, inference time, extracted text data, and detection visualization.
 
 ## Prerequisites
 
 - Anaconda or Miniconda installed on your system.
+- [Ollama](https://ollama.com/) installed and running locally.
 - A Groq API Key (available from the Groq Console).
 
 ## Installation
@@ -37,7 +39,15 @@ conda env create -f environment.yml
 conda activate face-id-matching
 ```
 
-### 3. Initialize Models
+### 3. Setup OCR Engine (Ollama)
+
+This system requires a local Vision Model to perform OCR. Ensure Ollama is running, then pull the model:
+
+```
+ollama pull qwen3-vl:8b
+```
+
+### 4. Initialize Face Models
 
 Run the quantization script to download the base models and generate the optimized INT8 version.
 
@@ -45,13 +55,13 @@ Run the quantization script to download the base models and generate the optimiz
 python src/quantizer.py
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 
 ```
 streamlit run app.py
 ```
 
-### 5. Running Unit Tests
+### 6. Running Unit Tests
 
 Execute the test suite to ensure the engine is functioning correctly.
 
@@ -69,6 +79,7 @@ Ensure your project files are organized as follows:
 │   └── main.py         # Streamlit Dashboard Entry Point
 ├── /src                # Core AI Logic
 │   ├── face_engine.py  # FaceVerifier Class (Inference Logic)
+│   ├── ocr_engine.py   # IdentityOCR Class (Ollama/Qwen-VL Integration)
 │   └── quantizer.py    # Model Optimization Pipeline (FP32 -> INT8)
 ├── /models             # Model Registry
 │   ├── resnet_fp32.pt  # Baseline Model
@@ -101,10 +112,11 @@ _Note: The current implementation uses Dynamic Quantization, which optimizes Lin
 
 - **Live Webcam Integration:** Add support for real-time video capture in the browser to simulate live user onboarding.
 - **Liveness Detection:** Implement an anti-spoofing layer (e.g., detecting screen reflections or depth cues) to prevent fraud.
-- **OCR Module:** Integrate an OCR engine (such as PaddleOCR or Tesseract) to extract Name and other data from IDs.
+- [x] **OCR Module:** Integrated a Generative AI OCR engine (Qwen-VL) to extract NIK and Name from ID cards.
 
 ## Tech Stack
 
 - **Language:** Python 3.10+
-- **Frameworks:** PyTorch, Streamlit
-- **Libraries:** Facenet-PyTorch, PIL, Unittest
+- **Core AI:** PyTorch, Torchvision, Facenet-PyTorch
+- **Generative AI:** Ollama (Qwen-VL)
+- **UI & Tools:** Streamlit, Pillow, Requests

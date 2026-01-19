@@ -1,1 +1,18 @@
-.jpg
+.gitignore
+
+# all jpg
+*.jpg
+*.csv
+*.png
+
+# models folder
+models/
+
+# dataset folder
+Selfies ID Images dataset/
+
+# pychache
+src/__pycache__/
+
+test_benchmark.py
+
